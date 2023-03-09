@@ -79,30 +79,6 @@ def get_yaml_config(config_file_path, yaml_tag):
     file_handle.close()
     return info
 
-def path_process(path_list, parent_path):
-    """change relative path to absolute path, and change \\ to /
-
-    Args:
-        path_list (string or string list): paths need to be changed
-        parent_path (string): parent path
-
-    Returns:
-        string or string list: changed path
-    """
-    string_list_type = type(['',''])
-    string_type = type('')
-    processed_path_list = []
-    if(type(path_list) == string_list_type):
-        for path in path_list:
-            processed_path = str.replace(path, '\\', '/')
-            processed_path = str.replace(processed_path, '..', parent_path)
-            processed_path_list.append(processed_path)
-        return processed_path_list
-    elif(type(path_list) == string_type):
-        processed_path = str.replace(path_list, '\\', '/')
-        processed_path = str.replace(processed_path, '..', parent_path)
-        return processed_path
-
 def path_absolute2relative(path_list, parent_path):
     """change absolute path to relative path
 
@@ -125,7 +101,7 @@ def path_absolute2relative(path_list, parent_path):
         processed_path = str.replace(path_list, parent_path + '/', '')
         return processed_path
 
-def get_parent_path(path, split_symbol):
+def get_parent_path(path, split_symbol, level):
     """get parent path
 
     Args:
@@ -138,7 +114,7 @@ def get_parent_path(path, split_symbol):
     reversed_path = ''
     times = 0
     for ch in reversed(path):
-        if(times >= 2):
+        if(times >= level):
             reversed_path = reversed_path + ch
         else:
             if(ch == split_symbol):
@@ -164,6 +140,33 @@ def get_dir_path(path, split_symbol):
             if(ch == split_symbol):
                 times = times + 1
     return reversed_path[::-1]
+
+def path_process(path_list, parent_path):
+    """change relative path to absolute path, and change \\ to /
+
+    Args:
+        path_list (string or string list): paths need to be changed
+        parent_path (string): parent path
+
+    Returns:
+        string or string list: changed path
+    """
+    string_list_type = type(['',''])
+    string_type = type('')
+    processed_path_list = []
+    dir_backtrack_level = 0
+    if(type(path_list) == string_list_type):
+        for path in path_list:
+            processed_path = str.replace(path, '\\', '/')
+            # processed_path = str.replace(processed_path, '..', parent_path)
+            dir_backtrack_level = processed_path.count('..')-1
+            processed_path = get_parent_path(parent_path, '/', dir_backtrack_level) + '/' + str.replace(processed_path, '../', '')
+            processed_path_list.append(processed_path)
+        return processed_path_list
+    elif(type(path_list) == string_type):
+        processed_path = str.replace(path_list, '\\', '/')
+        processed_path = str.replace(processed_path, '..', parent_path)
+        return processed_path
 
 def delete_head_file(file_list):
     """delete C head file from file list
@@ -216,10 +219,10 @@ if __name__ == '__main__':
     else:
         print('find keil project ' + keil_peoject_name)
 
-    keil_project_parent_path = path_process(get_parent_path(keil_project_path, '\\'), '')
+    keil_project_parent_path = path_process(get_parent_path(keil_project_path, '/', 2), '')
 
     # get user config from yaml file
-    yaml_file_path = os.path.abspath(os.path.join(os.getcwd(), "..")) + '\Config\Config.yml'
+    yaml_file_path = os.path.abspath(os.path.join(os.getcwd(), "..")) + '/Config/Config.yml'
     optimization = get_yaml_config(yaml_file_path, 'optimization')
     generate_mode = get_yaml_config(yaml_file_path, 'generate_mode')
     debug_build = get_yaml_config(yaml_file_path, 'debug_build')
@@ -289,26 +292,28 @@ if __name__ == '__main__':
     # get keil project config
     device = get_xml_config(keil_project_path, 'Device')
     defines = get_xml_config(keil_project_path, 'Define')
+    print(defines)
     misc_controls = get_xml_config(keil_project_path, 'MiscControls')
     include_path = get_xml_config(keil_project_path, 'IncludePath')
     source_path = get_xml_config(keil_project_path, 'FilePath')
     target_name = get_xml_config(keil_project_path, 'TargetName')
-    pocessed_include_path = path_process(include_path, keil_project_parent_path)
+    relative_include_path = split_list(include_path, ';')
+    pocessed_include_path = path_process(relative_include_path, keil_project_parent_path)
     processed_source_path = path_process(source_path, keil_project_parent_path)
     relative_include_path = path_absolute2relative(pocessed_include_path, root_path)
     relative_source_path = path_absolute2relative(processed_source_path, root_path)
     delete_head_file(relative_source_path)
     defines = split_list(defines, ',')
     misc_controls = split_list(misc_controls, ' ')
-    relative_include_path = split_list(relative_include_path, ';')
     # backspace make command wrong
     target_name = str.replace(target_name[0], ' ', '_')
     # to do: add C99 mode through <uC99>
 
+    link_script_type = ''
     # create link script
-    if not os.path.isfile(root_path + '\\' + device[0] + '_FLASH.ld') or generate_mode == 'create':
-        new_link_script_src_path_1 = os.path.abspath(os.path.join(os.getcwd(), "..")) + '\LinkScript\\' + device[0] + '_FLASH.ld'
-        new_link_script_src_path_2 = os.path.abspath(os.path.join(os.getcwd(), "..")) + '\LinkScript\\' + device[0] + 'Tx_FLASH.ld'
+    if not os.path.isfile(root_path + '/' + device[0] + '_FLASH.ld') or generate_mode == 'create':
+        new_link_script_src_path_1 = os.path.abspath(os.path.join(os.getcwd(), "..")) + '/LinkScript/' + device[0] + '_FLASH.ld'
+        new_link_script_src_path_2 = os.path.abspath(os.path.join(os.getcwd(), "..")) + '/LinkScript/' + device[0] + 'Tx_FLASH.ld'
         try:
             shutil.copy(new_link_script_src_path_1, root_path)
             link_script_type = 'link_script_type1'
@@ -395,7 +400,7 @@ if __name__ == '__main__':
                             pass
                         # copy new startup file
                         new_startup_file_src_path = os.path.abspath(os.path.join(os.getcwd(), "..")) + \
-                                                        '\StartupFile\startup_' + str.lower(device[0])[0:9] + 'xx.s'
+                                                        '/StartupFile/startup_' + str.lower(device[0])[0:9] + 'xx.s'
                         new_startup_file_dst_path = str.replace(get_dir_path(startup_file_path, '/'), '/', '\\')
                         if not os.path.exists(new_startup_file_dst_path):
                             os.makedirs(new_startup_file_dst_path)
